@@ -4,14 +4,10 @@ import Libraries.Roblox as roblox
 import Libraries.Hubs.PrikolsHub as prikolshub
 from Libraries.Logger import getLogger
 
-# Discord Imports
-import discord
+import discord, secrets, random, typing, os
 from discord.ext import tasks
 from discord import app_commands
 from discord import ui
-import typing
-
-import os
 
 global guild
 guild: discord.Guild = None
@@ -41,14 +37,20 @@ async def on_message(message:discord.Message):
 @client.event
 async def on_ready():
 	logger.info(f"Successfully logged in as {client.user.name}#{client.user.discriminator}")
-	await client.change_presence(activity=prikols_config.presence,status=prikols_config.status)
 	global guild
 	guild = client.get_guild(prikols_config.guild)
 
 	import Libraries.Extensions.OwnerCommands as OwnerGroup
 	OwnerGroup.BOT_CLIENT = client
 	tree.add_command(OwnerGroup.OwnerGroup(name="owner",description="Contains Owner-Only commands."))
-	
+
+	@tasks.loop(seconds=5,count=None)
+	async def statusChangeLoop():
+		rstat = random.choice(prikols_config.statuses)
+		await client.change_presence(activity=rstat,status=prikols_config.status)
+
+	statusChangeLoop.start()
+
 	await tree.sync()
 	logger.info("Successfully loaded!")
 

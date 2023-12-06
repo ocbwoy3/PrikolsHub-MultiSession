@@ -162,6 +162,7 @@ cython_debug/
 # PrikolsHub RoControl specific stuff
 config.py
 Configuration.json
+db/
 
 # I intentionally gitignored PrikolsHub, so my scripts won't get stolen.
 Libraries/Hubs/PrikolsHub.py

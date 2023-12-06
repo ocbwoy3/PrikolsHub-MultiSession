@@ -3,15 +3,18 @@
 """
 
 import config as prikols_config
-import discord
-from discord import app_commands
-import os
+import discord, os, json, typing, secrets
+from discord import app_commands, Interaction
+from discord.ext import tasks
 
-import json
+import config as prikols_config
+import Libraries.Configuration as config
 
 import Libraries.Logger as logger
 alogger = logger.getLogger("prikolshub.archiver")
 sjlogger = logger.getLogger("prikolshub.settings")
+
+BOT_CLIENT:discord.Client = None
 
 def parseFileExtension(filename:str):
 	fn, file_extension = os.path.splitext(filename)
@@ -20,22 +23,42 @@ def parseFileExtension(filename:str):
 def getPFPThingy(message:discord.Message):
 	return str(message.author.id)+"-w"+str(message.author.display_name.__hash__()).replace("-","b")
 
-BOT_CLIENT:discord.Client = None
+async def ConfigAutocomplete(interaction:Interaction,current:str) -> typing.List[app_commands.Choice[str]]:
+	return [
+		app_commands.Choice(name=config.Config_l10n.get(conf)+" ("+str(config.CURRENT_CONFIG_TEMP.get(conf))+")",value=conf) for conf in config.CURRENT_CONFIG_TEMP if current in config.Config_l10n.get(conf).lower()
+	]
 
 class OwnerGroup(app_commands.Group):
 	BOTCLIENT = BOT_CLIENT
 
-	@app_commands.command(name="killswitch",description="Disable the usage of the /script command to the general public.")
-	@app_commands.describe(enable="The state of the script command.")
-	async def killswitchCommand(self,interaction:discord.Interaction,enable:bool):
+	@app_commands.command(name="sendfile",description="Send a file.")
+	@app_commands.describe(file="The attachment to send.")
+	async def send_file(self,interaction:discord.Interaction,file:discord.Attachment):
 		if interaction.user.id in prikols_config.owners:
 			pass
 		else:
 			await interaction.response.send_message("You are not the owner of PrikolsHub RoControl!",ephemeral=True)
 			return
-		await interaction.response.send_message("Attempting to set!",ephemeral=True)
-		global SCRIPT_KILLSWITCH
-		SCRIPT_KILLSWITCH = enable
+		await interaction.response.send_message("will be sent shortly",ephemeral=True)
+		os.makedirs("temp",exist_ok=True)
+		filname = f"temp/{str(file.url.__hash__())}"
+		await file.save(filname)
+		await interaction.channel.send(file=discord.File(fp=filname,filename=file.filename))
+		os.remove(filname)
+
+	@app_commands.command(name="config",description="Change the settings of PrikolsHub RoControl.")
+	@app_commands.describe(option="The configuration option to change.",value="The new value of the configuration option.")
+	@app_commands.autocomplete(option=ConfigAutocomplete)
+	async def configCommand(self,interaction:discord.Interaction,option:str,value:bool):
+		if interaction.user.id in prikols_config.owners:
+			pass
+		else:
+			await interaction.response.send_message("You are not the owner of PrikolsHub RoControl!",ephemeral=True)
+			return
+		await interaction.response.send_message("option: "+config.Config_l10n.get(option)+"\nnew value: "+str(value))
+		theconfig = config.CURRENT_CONFIG_TEMP
+		theconfig[option] = value
+		config.UpdateConfig(theconfig)
 	
 	@app_commands.command(name="export",description="Exports the current channel alongside it's media into a folder.")
 	async def exportCommand(self,interaction:discord.Interaction):
@@ -109,27 +132,31 @@ class OwnerGroup(app_commands.Group):
 	@app_commands.command(name="impersonate",description="Impersonates a user by stealing their profile details.")
 	@app_commands.describe(victim="The victim the bot is going to impersonate.",username="Manually asign a username.")
 	async def impersonateCommand(self,interaction:discord.Interaction,victim:discord.User,username:str=None):
+		if victim.id == 376467030385229834:
+			await interaction.response.send_message("Impersonating Darktru?\nnuh uh")
+			return
 		if interaction.user.id in prikols_config.owners:
 			pass
 		else:
 			await interaction.response.send_message("You are not the owner of PrikolsHub RoControl!",ephemeral=True)
 			return
+		implogger = logger.getLogger("prikolshub.util")
 		try:
-			await interaction.guild.get_member(self.BOTCLIENT.user.id).edit(nick=victim.display_name)
+			await interaction.guild.get_member(BOT_CLIENT.user.id).edit(nick=victim.display_name)
 			victim_avatar = await victim.display_avatar.read()
 			theuser = username or victim.display_name
-			await self.BOTCLIENT.user.edit(avatar=victim_avatar,username=theuser)
-			await interaction.response.send_message(f"Successfully impersonated <@{victim.id}>!",ephemeral=True)
-			logger.info(f"Impersonation command got triggered. User impersonated: {victim.display_name} (@{victim.name})")
+			await BOT_CLIENT.user.edit(avatar=victim_avatar,username=theuser)
+			await interaction.response.send_message(f"Successfully impersonated <@{victim.id}>!")
+			implogger.info(f"Impersonation command got triggered. User impersonated: {victim.display_name} (@{victim.name})")
 		except Exception as ex:
 			try:
 				try:
 					victim_avatar = await victim.display_avatar.read()
-					await self.BOTCLIENT.user.edit(avatar=victim_avatar)
+					await BOT_CLIENT.user.edit(avatar=victim_avatar)
 					await interaction.response.send_message(f"Partially impersonated <@{victim.id}>!\nException: {ex}",ephemeral=True)
-					logger.warning("Only PFP got updated, possibly due to rate limiting.")
+					implogger.warning("Only PFP got updated, possibly due to rate limiting.")
 				except Exception as ex2:
-					logger.error("Nothing updated, possibly due to rate limiting.")
+					implogger.error("Nothing updated, possibly due to rate limiting.")
 					await interaction.response.send_message(f"FallbackPFPUpdateOnly - Report exception to OCbwoy3: {ex2}",ephemeral=True)
-			except:
-				await interaction.response.send_message(f"impersonateFailDisplay - Report exception to OCbwoy3: Failed to display exception",ephemeral=True)
+			except Exception as ex:
+				await interaction.response.send_message(f"Report exception to OCbwoy3: {ex}",ephemeral=True)
