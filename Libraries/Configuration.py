@@ -13,14 +13,22 @@ Default_Config = {
 	"CensorProfanity":False,
 	"EnablePersistKey":False,
 	"KillSwitch":False,
-	"AllowExeCommand":True
+	"AllowExeCommand":True,
+	"Antileak":True,
+	"DisableWerkzeugLogger":True,
+	"EphmerealImageUploads":True, # Necessary if someone, you know, sends an innapropriate image to a server.
+	"DisableImageUploads":False
 }
 
 Config_l10n = {
 	"CensorProfanity":"Censor Profanity",
 	"EnablePersistKey":"Enable usage of PERSISTKEY",
-	"KillSwitch":"Kill Switch",
-	"AllowExeCommand":"Allow execution of user scripts"
+	"KillSwitch":"KILL SWITCH",
+	"AllowExeCommand":"Allow execution of user scripts",
+	"Antileak":"AntiLeak",
+	"DisableWerkzeugLogger":"Disable Flask/Werkzeug logging",
+	"EphmerealImageUploads":"Ephmereal Image Uploads",
+	"DisableImageUploads":"Disable image uploads"
 }
 
 def __integrityFieldCheck__(tbl):

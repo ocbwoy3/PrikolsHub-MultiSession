@@ -3,9 +3,10 @@
 """
 
 import config as prikols_config
-import discord, os, json, typing, secrets
+import discord, os, json, typing, secrets, json
 from discord import app_commands, Interaction
 from discord.ext import tasks
+import Libraries.RoControl as SessionPoolProvider
 
 import config as prikols_config
 import Libraries.Configuration as config
@@ -15,6 +16,8 @@ alogger = logger.getLogger("prikolshub.archiver")
 sjlogger = logger.getLogger("prikolshub.settings")
 
 BOT_CLIENT:discord.Client = None
+
+getSessionPoolsFunc = None
 
 def parseFileExtension(filename:str):
 	fn, file_extension = os.path.splitext(filename)
