@@ -121,9 +121,9 @@ async def LoadSessionPools():
 			the_webhook = await ch.create_webhook(name="PrikolsHub RoControl SessionPool")
 
 		thepool = SessionPoolProvider.SessionPool(name=session_pool[0],persistkey=session_pool[2],channel=ch,webhook=the_webhook)
-		thepool.AddServer("ffffffff-ffff-ffff-ffffffffffff",69420)
-		thepool.SendRobloxMessageToChannel("OCboy3","OCbwoy3",1083030325,f"test message session pool {session_pool[0]}","ffffffff-ffff-ffff-ffffffffffff",69420)
-		thepool.RemoveServer("ffffffff-ffff-ffff-ffffffffffff",69420)
+		#thepool.AddServer("ffffffff-ffff-ffff-ffffffffffff",69420)
+		#thepool.SendRobloxMessageToChannel("OCboy3","OCbwoy3",1083030325,f"test message session pool {session_pool[0]}","ffffffff-ffff-ffff-ffffffffffff",69420)
+		#thepool.RemoveServer("ffffffff-ffff-ffff-ffffffffffff",69420)
 
 		session_pools.update({str(session_pool[1]):thepool})
 	loggers.CustomLogger("prikolshub.debugger").debug("SessionPools: "+str(session_pools))

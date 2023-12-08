@@ -22,6 +22,65 @@ __SessionsCreated__ = 0
 debug = loggers.CustomLogger("prikolshub.debugger")
 splogger = loggers.splogger
 
+class ServerSessionPool:
+	ses_skey = "None"
+	sespool_name = "Unknown SessionPool"
+	sespool_id = -1
+
+	persistkey = secrets.token_urlsafe(32)
+
+	session_cache = {}
+	roblox_cache = []
+	servers = []
+
+	def __init__(self,name:str,persistkey=secrets.token_urlsafe(32)):
+		global __SessionsCreated__
+		global __SessionPools__
+		__SessionsCreated__ += 1
+		self.sespool_id = __SessionsCreated__
+		self.sespool_name = name
+		self.ses_skey = secrets.token_urlsafe(16)
+		self.persistkey = persistkey
+
+	def SendToRoblox(self,thing_to_send):
+		for session in self.session_cache.keys():
+			self.session_cache.get(session).append(thing_to_send)
+
+	def SendToDiscord(self,thing_to_send):
+		self.roblox_cache.append(thing_to_send)
+
+	def AddServer(self,jobid:str,placeid:int):
+		self.servers.append(f"{jobid[:50]}@{str(placeid)[:50]}")
+		self.session_cache.update({f"{jobid[:50]}@{str(placeid)[:50]}":[]})
+		splogger.info(f"Server {jobid[:50]}@{str(placeid)[:50]} added to {self.sespool_name}")
+
+	def RemoveServer(self,jobid:str,placeid:int):
+		try:
+			self.servers.pop(f"{jobid[:50]}@{str(placeid)[:50]}")
+			self.session_cache.pop(f"{jobid[:50]}@{str(placeid)[:50]}","")
+		except:
+			pass
+		splogger.info(f"Server {jobid[:50]}@{str(placeid)[:50]} removed from {self.sespool_name}")
+
+	def GetSessionCache(self,jobid:str,placeid:int):
+		tr = copy.deepcopy(self.session_cache.get(f"{jobid[:50]}@{str(placeid)[:50]}",[]))
+		self.session_cache.update({f"{jobid[:50]}@{str(placeid)[:50]}":[]})
+		return tr
+	
+	def GetRobloxCache(self):
+		tr = copy.deepcopy(self.roblox_cache)
+		self.roblox_cache = []
+		return tr
+
+	def GetDebuggingInformation(self):
+		return {
+			"session_cache": self.session_cache,
+			"roblox_cache": self.roblox_cache,
+			"servers": self.servers,
+			"name": self.sespool_name,
+			"id": self.sespool_id
+		}
+
 
 class SessionPool:
 	ses_skey = "None"
