@@ -5,6 +5,7 @@ import Libraries.Hubs.PrikolsHub as prikolshub
 import Libraries.Configuration as ConfigProvider
 import Libraries.RoControl as SessionPoolProvider
 import Libraries.Logger as loggers # import getLogger, prikols_logger, splogger
+from Libraries.Sync import sync as Sync
 
 import discord, secrets, random, typing, os
 from discord.ext import tasks
