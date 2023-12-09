@@ -1,16 +1,22 @@
 import requests, flask
 import Libraries.Util as util
 
+import json
 import config as prikols_config
 from flask import Flask, jsonify, request
 
+GetQueue = None
+
 OnSync = util.Event()
 
-def sync(data):
-	return requests.post(f"http://127.0.0.1:26947/sync",data,headers=prikols_config.HEADERS).json
+def Sync(data):
+	return requests.post(f"http://127.0.0.1:26947/sync/data",json.dumps(data),headers=prikols_config.HEADERS).json()
+
+def SyncPools():
+	return requests.post(f"http://127.0.0.1:26947/sync/pools","{}",headers=prikols_config.HEADERS).json()
 
 def InitSyncServer(app:Flask):
-	@app.route("/sync",methods=['POST'])
+	@app.route("/sync/data",methods=['POST'])
 	def syncPath():
 		if "Authorization" in request.headers:
 			try:
@@ -22,3 +28,5 @@ def InitSyncServer(app:Flask):
 		else:
 			return jsonify({"status":"NoPermission"}), 200
 		OnSync.Trigger(request.json)
+		return jsonify({"status":"success"}), 200
+			

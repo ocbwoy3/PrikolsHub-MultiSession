@@ -5,7 +5,7 @@ import Libraries.Hubs.PrikolsHub as prikolshub
 import Libraries.Configuration as ConfigProvider
 import Libraries.RoControl as SessionPoolProvider
 import Libraries.Logger as loggers
-import Libraries.Sync as sync
+import Libraries.Sync as Sync
 
 import threading
 import websockets, asyncio
@@ -17,7 +17,8 @@ import secrets, random, copy
 
 app = Flask(__name__)
 
-sync.InitSyncServer(app)
+Sync.InitSyncServer(app)
+OnSync = Sync.OnSync
 
 plogger = loggers.CustomLogger("prikolshub")
 clogger = loggers.CustomLogger("prikolshub.config")
@@ -139,6 +140,36 @@ def getScriptRoute():
 def getRoot():
 	return {"Name":"PrikolsHub RoControl MultiSession","SessionPools":len(__SessionPools__)}
 
+global sessionsQueuedForCreation
+sessionsQueuedForCreation = []
+
+global sessionsQueuedForRemoval
+sessionsQueuedForRemoval = []
+
+def getImportantStuff():
+	global sessionsQueuedForCreation, sessionsQueuedForRemoval
+	qcr = copy.deepcopy(sessionsQueuedForCreation)
+	qrm = copy.deepcopy(sessionsQueuedForRemoval)
+	sessionsQueuedForCreation = []
+	sessionsQueuedForRemoval = []
+	return {
+		"create":qcr,
+		"remove":qrm
+	}
+
+@app.route("/sync/pools",methods=['POST'])
+def syncPathPools():
+	if "Authorization" in request.headers:
+		try:
+			token_ = request.headers.get("Authorization")
+			if token_ != prikols_config.prikols_key:
+				raise RuntimeError("Invalid token!!1!1")
+		except:
+			return jsonify({"status":"InvalidToken"}), 200
+	else:
+		return jsonify({"status":"NoPermission"}), 200
+	return getImportantStuff()
+
 @app.route("/pool/<pool>/<session>/create",methods=["POST"])
 def createSession(pool:str,session:str):
 	sp: SessionPoolProvider.ServerSessionPool = getSessionPoolById(int(pool[:3]))
@@ -147,7 +178,29 @@ def createSession(pool:str,session:str):
 	splitted = session.split("@")
 	if len(splitted) != 2:
 		return jsonify({"status":"NotFound"}), 404
-	sp.AddServer(splitted[0],int(splitted[1]))
+	try:
+		sp.AddServer(splitted[0],int(splitted[1]))
+		global sessionsQueuedForCreation
+		sessionsQueuedForCreation.append([pool[:5],session[:50]])
+		return jsonify({"staus":"success"}), 200
+	except:
+		return jsonify({"staus":"exists"}), 200
+
+@app.route("/pool/<pool>/<session>/remove",methods=["POST"])
+def removeSession(pool:str,session:str):
+	sp: SessionPoolProvider.ServerSessionPool = getSessionPoolById(int(pool[:3]))
+	if not sp:
+		return jsonify({"status":"SessionPoolNotFound"}), 404
+	splitted = session.split("@")
+	if len(splitted) != 2:
+		return jsonify({"status":"NotFound"}), 404
+	try:
+		sp.RemoveServer(splitted[0],int(splitted[1]))
+		global sessionsQueuedForRemoval
+		sessionsQueuedForRemoval.append([pool[:5],session[:50]])
+		return jsonify({"staus":"success"}), 200
+	except:
+		return jsonify({"staus":"doesntexist"}), 200
 
 @app.route("/pool/<pool>/messages",methods=["POST"])
 def poolGetQueueEndpoint(pool:str):
@@ -167,7 +220,7 @@ def poolGetQueueEndpoint(pool:str):
 		sp.SendToRoblox(msg)
 	if not sp:
 		return jsonify({"status":"SessionPoolNotFound"}), 404
-	return sp.GetRobloxCache()
+	return jsonify({"cache":sp.GetRobloxCache()}), 200
 
 @app.route("/pool/<pool>/<session>/messages",methods=["POST"])
 def getMessagesEndpoint(pool:str,session:str):
@@ -179,7 +232,7 @@ def getMessagesEndpoint(pool:str,session:str):
 	for msg in request.json.get('messages'):
 		sp.SendToDiscord(msg)
 	splittedsession = session.split('@')
-	return sp.GetSessionCache(splittedsession[0],int(splittedsession[1]))
+	return jsonify({"cache":sp.GetSessionCache(splittedsession[0],int(splittedsession[1]))}), 200
 
 if __name__ == "__main__":
 	DisableWerkzeugLogger = ConfigProvider.getConfig().get('DisableWerkzeugLogger',True)

@@ -5,7 +5,7 @@ import Libraries.Hubs.PrikolsHub as prikolshub
 import Libraries.Configuration as ConfigProvider
 import Libraries.RoControl as SessionPoolProvider
 import Libraries.Logger as loggers # import getLogger, prikols_logger, splogger
-from Libraries.Sync import sync as Sync
+from Libraries.Sync import Sync, SyncPools
 
 import discord, secrets, random, typing, os
 from discord.ext import tasks
@@ -86,20 +86,38 @@ async def on_message(message:discord.Message):
 	except:
 		pass
 
-@tree.command(name="debug",description="Get the debug information of the current SessionPool.")
-async def sespool_debug(interaction:discord.Interaction):
+async def debugInfoAutocomplete(interaction:discord.Interaction,current:str) -> typing.List[app_commands.Choice[str]]:
+	return [
+		app_commands.Choice(name="SessionPool information",value=1),
+		app_commands.Choice(name="Session request queue",value=2)
+	]
+
+@tree.command(name="debug",description="Get useful debugging information. DO NOT USE")
+@app_commands.describe(infotype="Information type to return")
+@app_commands.autocomplete(infotype=debugInfoAutocomplete)
+async def sespool_debug(interaction:discord.Interaction,infotype:int):
 	if interaction.user.id in prikols_config.owners:
 		pass
 	else:
 		await interaction.response.send_message("You are not the owner of PrikolsHub RoControl!",ephemeral=True)
 		return
-	sp: SessionPoolProvider.SessionPool = session_pools.get(str(interaction.channel_id),False)
-	if sp == False:
-		await interaction.response.send_message("sessionpool doesnt exist")
+	
+	if infotype == 1:
+		sp: SessionPoolProvider.SessionPool = session_pools.get(str(interaction.channel_id),False)
+		if sp == False:
+			await interaction.response.send_message("sessionpool doesnt exist")
+			return
+		cach = sp.GetDebuggingInformation()
+		await interaction.response.send_message(f"PrikolsHub SessionPool Debug\n```json\n{ConfigProvider.json.dumps(cach)}\n```",ephemeral=True)
 		return
-	cach = sp.GetDebuggingInformation()
-	#print(cach)
-	await interaction.response.send_message(f"PrikolsHub SessionPool Debug\n```json\n{ConfigProvider.json.dumps(cach)}\n```",ephemeral=True)
+
+	if infotype == 2:
+		synceddata = SyncPools("Test")
+		#print(synceddata)
+		await interaction.response.send_message(f"PrikolsHub Session Queue Debug\n```json\n{ConfigProvider.json.dumps(synceddata)}\n```",ephemeral=True)
+		return
+	
+	await interaction.response.send_message(f"Invalid information type",ephemeral=True)
 
 async def LoadSessionPools():
 	"""
@@ -129,6 +147,24 @@ async def LoadSessionPools():
 		session_pools.update({str(session_pool[1]):thepool})
 	loggers.CustomLogger("prikolshub.debugger").debug("SessionPools: "+str(session_pools))
 
+@tasks.loop(seconds=1,count=None)
+async def serverUpdateLoop():
+	synced = SyncPools()
+	tad = synced.get("create",[])
+	trm = synced.get("remove",[])
+	for obj in tad:
+		try:
+			xd = obj[1].split("@")
+			getSessionPoolById(int(obj[0])).AddServer(xd[0],int(xd[1]))
+		except:
+			pass
+	for obj in trm:
+		try:
+			xd = obj[1].split("@")
+			getSessionPoolById(int(obj[0])).RemoveServer(xd[0],int(xd[1]))
+		except:
+			pass
+
 @tasks.loop(seconds=5,count=None)
 async def statusChangeLoop():
 	connected_servers = 0
@@ -141,6 +177,7 @@ async def statusChangeLoop():
 		spkw = "SessionPool" 
 	rstat = discord.Activity(type=discord.ActivityType.watching,name=f"{connected_servers} {skw} in {len(session_pools)} {spkw}.")
 	await client.change_presence(activity=rstat,status=prikols_config.status)
+
 
 @client.event
 async def on_ready():
@@ -159,7 +196,11 @@ async def on_ready():
 	await tree.sync()
 
 	logger.info("Loading SessionPools")
-	await LoadSessionPools() #NOTE - Most important Python function in 2283
+
+	#NOTE - DO NOT REMOVE THESE TWO
+	await LoadSessionPools()
+	serverUpdateLoop.start()
+
 	logger.info("Successfully loaded!")
 
 def runBot():

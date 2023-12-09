@@ -7,6 +7,8 @@ import Libraries.Roblox as roblox
 import Libraries.Logger as loggers
 from discord.ext import tasks
 
+import requests, json
+
 global __SessionPools__
 __SessionPools__ = {}
 
@@ -17,7 +19,7 @@ __SessionsCreated__ = 0
 # [str,bool,array] - command
 
 # From Roblox
-# [str,int,str] - message
+# [str,str,int,str] - message
 
 debug = loggers.CustomLogger("prikolshub.debugger")
 splogger = loggers.splogger
@@ -50,13 +52,19 @@ class ServerSessionPool:
 		self.roblox_cache.append(thing_to_send)
 
 	def AddServer(self,jobid:str,placeid:int):
+		if f"{jobid[:50]}@{str(placeid)[:50]}" in self.servers:
+			raise RuntimeError("Exists!")
 		self.servers.append(f"{jobid[:50]}@{str(placeid)[:50]}")
 		self.session_cache.update({f"{jobid[:50]}@{str(placeid)[:50]}":[]})
 		splogger.info(f"Server {jobid[:50]}@{str(placeid)[:50]} added to {self.sespool_name}")
 
 	def RemoveServer(self,jobid:str,placeid:int):
+		if f"{jobid[:50]}@{str(placeid)[:50]}" in self.servers:
+			pass
+		else:
+			raise RuntimeError("Doesn't exist!")
 		try:
-			self.servers.pop(f"{jobid[:50]}@{str(placeid)[:50]}")
+			self.servers.remove(f"{jobid[:50]}@{str(placeid)[:50]}")
 			self.session_cache.pop(f"{jobid[:50]}@{str(placeid)[:50]}","")
 		except:
 			pass
@@ -81,7 +89,6 @@ class ServerSessionPool:
 			"id": self.sespool_id
 		}
 
-
 class SessionPool:
 	ses_skey = "None"
 	sespool_name = "Unknown SessionPool"
@@ -89,7 +96,7 @@ class SessionPool:
 
 	persistkey = secrets.token_urlsafe(32)
 
-	session_cache = {}
+	session_cache = []
 	romsg_cache = []
 	servers = []
 
@@ -121,7 +128,6 @@ class SessionPool:
 		postMsg.start()
 		splogger.info(f"Server {jobid[:50]}@{str(placeid)[:50]} added to {self.sespool_name}")
 		self.servers.append(f"{jobid[:50]}@{str(placeid)[:50]}")
-		self.session_cache.update({f"{jobid[:50]}@{str(placeid)[:50]}":[]})
 
 	def RemoveServer(self,jobid:str,placeid:int):
 		try:
@@ -132,7 +138,7 @@ class SessionPool:
 		emb = discord.Embed(
 			color = discord.Color.from_rgb(255,0,0),
 			title="Server disconnected",
-			description=f"Job ID: {jobid[:50]}\nSession Pool: {self.sespool_name}"
+			description=f"Place ID: {str(placeid)[:50]}\nJob ID: {jobid[:50]}\nSession Pool: {self.sespool_name}"
 		)
 		@tasks.loop(count=1,seconds=0.001)
 		async def postMsg():
@@ -142,17 +148,14 @@ class SessionPool:
 
 	def RegisterCommandUse(self,commandName:str,arguments:[str]):
 		for session in self.session_cache.keys():
-			self.session_cache.get(session).append([commandName,True,arguments])
+			self.session_cache.append([commandName,True,arguments])
 
 	def RegisterChatMessage(self,sender:str,role_color:str,message:str):
 		#print(sender,role_color,message)
 		for session in self.session_cache.keys():
-			self.session_cache.get(session).append([sender,role_color,message[:500]])
+			self.session_cache.append([sender,role_color,message[:500]])
 
-	def SendRobloxMessageToChannel(self,name:str,display_name:str,user_id:int,message:str,jobid:str,placeid:int):
-		if f"{jobid[:50]}@{str(placeid)[:50]}" not in self.servers:
-			#debug.debug(f"JobID {jobid} tried to send message but is not in servers!")
-			return
+	def SendRobloxMessageToChannel(self,name:str,display_name:str,user_id:int,message:str):
 		pfp = self.pfp_cache.get(str(user_id),False)
 		if pfp == False:
 			pfp = roblox.getProfilePic(user_id)
@@ -163,12 +166,12 @@ class SessionPool:
 			if '$' in name:
 				await self.webhook.send(the_message[:500],username=f"{display_name}",avatar_url=pfp)
 			else:	
-				await self.webhook.send(the_message[:500],username=f"{display_name} (@{name}, {user_id}, {jobid[:50]}@{str(placeid)[:50]})",avatar_url=pfp)
+				await self.webhook.send(the_message[:500],username=f"{display_name} (@{name}, {user_id})",avatar_url=pfp)
 		postMsg.start()
 		
 	def GetSessionCache(self,jobid:str,placeid:int):
-		tr = copy.deepcopy(self.session_cache.get(f"{jobid[:50]}@{str(placeid)[:50]}",[]))
-		self.session_cache.update({f"{jobid[:50]}@{str(placeid)[:50]}":[]})
+		tr = copy.deepcopy(self.session_cache)
+		self.session_cache = [] #.update({f"{jobid[:50]}@{str(placeid)[:50]}":[]})
 		return tr
 
 	def GetDebuggingInformation(self):
@@ -179,3 +182,15 @@ class SessionPool:
 			"name": self.sespool_name,
 			"id": self.sespool_id
 		}
+	
+	def startMainLoop(self):
+		@tasks.loop(seconds=0.5,count=None)
+		async def TheRealMainLoop():
+			datatosend = json.dumps({
+				"messages": self.GetSessionCache()
+			})
+			data = requests.post(f"http://127.0.0.1/pool/{self.sespool_id}/messages").json()
+			for obj in data.get("cache"):
+				self.SendRobloxMessageToChannel(obj[0],obj[1],obj[2],obj[3])
+
+		TheRealMainLoop.start()			
