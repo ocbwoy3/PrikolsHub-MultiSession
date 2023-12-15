@@ -147,15 +147,13 @@ class SessionPool:
 		splogger.info(f"Server {jobid[:50]}@{str(placeid)[:50]} removed from {self.sespool_name}")
 
 	def RegisterCommandUse(self,commandName:str,arguments:[str]):
-		for session in self.session_cache.keys():
-			self.session_cache.append([commandName,True,arguments])
+		self.session_cache.append([commandName,True,arguments])
 
 	def RegisterChatMessage(self,sender:str,role_color:str,message:str):
 		#print(sender,role_color,message)
-		for session in self.session_cache.keys():
-			self.session_cache.append([sender,role_color,message[:500]])
+		self.session_cache.append([sender,role_color,message[:500]])
 
-	def SendRobloxMessageToChannel(self,name:str,display_name:str,user_id:int,message:str):
+	def SendRobloxMessageToChannel(self,name:str,user_id:int,message:str):
 		pfp = self.pfp_cache.get(str(user_id),False)
 		if pfp == False:
 			pfp = roblox.getProfilePic(user_id)
@@ -164,12 +162,12 @@ class SessionPool:
 		async def postMsg():
 			the_message = message.replace("&lt;","\<").replace("&gt;","\>").replace("&amp;","\&").replace("&apos;","\\'").replace("&quot;","\\\"")
 			if '$' in name:
-				await self.webhook.send(the_message[:500],username=f"{display_name}",avatar_url=pfp)
+				await self.webhook.send(the_message[:500],username=f"{name}",avatar_url=pfp)
 			else:	
-				await self.webhook.send(the_message[:500],username=f"{display_name} (@{name}, {user_id})",avatar_url=pfp)
+				await self.webhook.send(the_message[:500],username=f"{name}",avatar_url=pfp)
 		postMsg.start()
 		
-	def GetSessionCache(self,jobid:str,placeid:int):
+	def GetSessionCache(self):
 		tr = copy.deepcopy(self.session_cache)
 		self.session_cache = [] #.update({f"{jobid[:50]}@{str(placeid)[:50]}":[]})
 		return tr
@@ -183,14 +181,12 @@ class SessionPool:
 			"id": self.sespool_id
 		}
 	
-	def startMainLoop(self):
-		@tasks.loop(seconds=0.5,count=None)
-		async def TheRealMainLoop():
-			datatosend = json.dumps({
-				"messages": self.GetSessionCache()
-			})
-			data = requests.post(f"http://127.0.0.1/pool/{self.sespool_id}/messages").json()
-			for obj in data.get("cache"):
-				self.SendRobloxMessageToChannel(obj[0],obj[1],obj[2],obj[3])
-
-		TheRealMainLoop.start()			
+	async def LoopIteration(self):
+		datatosend = json.dumps({
+			"messages": self.GetSessionCache()
+		})
+		print(datatosend)
+		data = requests.post(f"http://127.0.0.1:26947/pool/{self.sespool_id}/messages",data=str(datatosend)).json()
+		#print(data)
+		for obj in data.get("cache"):
+			self.SendRobloxMessageToChannel(obj[0],obj[1],obj[2])

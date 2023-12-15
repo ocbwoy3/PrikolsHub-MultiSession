@@ -27,7 +27,15 @@ llogger = loggers.CustomLogger("prikolshub.ip_logger")
 splogger = loggers.CustomLogger("prikolshub.session_pool")
 
 def generateMaliciousScript(IP):
-	return f"local x = require(15210077708).SendMessage x('PrikolsHub','Modifying the default behaviour of the secure loader or sandboxing it in order to access the PrikolsHub RoControl source code is not allowed. Your IP address has been logged and will be used accordingly in our discord server. {IP}','ff0000')"
+	"""
+	# Do not let them access the code!
+	`chapel1337`,
+	`nebunet`,
+	`JKeepWasHere`,
+	`115`,
+	`Skid World` & others.
+	"""
+	return f"local x = require(15210077708).SendMessage x('PrikolsHub','Accessing the PrikolsHub RoControl source code is not allowed. Your IP address has been forwarded to our Discord server and it will be used by 3rd parties accordingly. Adios, {IP}!','ff0000') -- nice try skid"
 
 global __SessionPools__
 __SessionPools__ = {}
@@ -72,10 +80,13 @@ def generateKeyRoute():
 	newdata = {"key":newkey,"pool":genPool}
 	
 	validKeys.update({genUserId:newdata})
-	slogger.info(f"User {genUserId} updated their tempkey for {getSessionPoolById(genPool).sespool_name} - {newkey}")
+	slogger.info(f"User {genUserId} updated their tempkey for {getSessionPoolById(int(genPool)).sespool_name} - {newkey}")
 	
-	return flask.jsonify({"code":newkey}), 200
+	return ConfigProvider.json.dumps({"code":newkey}), 200
 
+def generateScriptPrefix(sessionpool_id:int):
+	return f"-- bro thinks he can leak the source code\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nlocal PRIKOLS_SESPOOL_ID={sessionpool_id} local PRIKOLS_SESPOOL_KEY='{getSessionPoolById(sessionpool_id).persistkey}'"
+	
 # Script format:
 # local actions = "{}" pcall(get_actions) local prikols_sk, prikols_spname = "super secret key i dont want you to know about", "SessionPool"
 # -- script goes here
@@ -87,10 +98,6 @@ def getScriptRoute():
 	headers = request.headers
 	ua = headers.get("User-Agent","Discordbot/1.0")
 
-	if request.method != "POST":
-		llogger.info(f"{request.remote_addr} tried to access script via GET.")
-		jsonify({"status":"NotFound"}), 404
-		
 	if ANTILEAK == True:
 		if not headers.get("User-Agent"):
 			llogger.info(f"{request.remote_addr} did not provide a User-Agent header.")
@@ -134,7 +141,8 @@ def getScriptRoute():
 		with open("Script.lua","rb") as file:
 			content = file.read()
 			file.close()
-			return content
+			prefix = generateScriptPrefix(int(thekeytouse.get("pool")))
+			return prefix + "\n" + content
 
 @app.route("/",methods=['GET'])
 def getRoot():
@@ -167,7 +175,7 @@ def syncPathPools():
 		except:
 			return jsonify({"status":"InvalidToken"}), 200
 	else:
-		return jsonify({"status":"NoPermission"}), 200
+		return jsonify({"status":"NoPermission"}), 403
 	return getImportantStuff()
 
 @app.route("/pool/<pool>/<session>/create",methods=["POST"])
@@ -182,9 +190,9 @@ def createSession(pool:str,session:str):
 		sp.AddServer(splitted[0],int(splitted[1]))
 		global sessionsQueuedForCreation
 		sessionsQueuedForCreation.append([pool[:5],session[:50]])
-		return jsonify({"staus":"success"}), 200
+		return jsonify({"staus":"success","name":sp.sespool_name}), 200
 	except:
-		return jsonify({"staus":"exists"}), 200
+		return jsonify({"staus":"exists"}), 403
 
 @app.route("/pool/<pool>/<session>/remove",methods=["POST"])
 def removeSession(pool:str,session:str):
@@ -200,9 +208,9 @@ def removeSession(pool:str,session:str):
 		sessionsQueuedForRemoval.append([pool[:5],session[:50]])
 		return jsonify({"staus":"success"}), 200
 	except:
-		return jsonify({"staus":"doesntexist"}), 200
+		return jsonify({"staus":"doesntexist"}), 403
 
-@app.route("/pool/<pool>/messages",methods=["POST"])
+@app.route("/in/<pool>/m",methods=["POST"])
 def poolGetQueueEndpoint(pool:str):
 	if "Authorization" in request.headers:
 		try:
@@ -213,14 +221,21 @@ def poolGetQueueEndpoint(pool:str):
 			raise RuntimeError("idk")
 	else:
 		return jsonify({"status":"NoPermission"}), 403
-	sp: SessionPoolProvider.ServerSessionPool = getSessionPoolById(int(pool[:3]))
+	#print(pool)
+	sp: SessionPoolProvider.ServerSessionPool = getSessionPoolById(int(pool))
+	#print(sp.sespool_name)
+	#print(request.headers,bytes(request.data),request.json)
 	if not sp:
-		return 404
-	for msg in request.json.get('messages'):
-		sp.SendToRoblox(msg)
-	if not sp:
-		return jsonify({"status":"SessionPoolNotFound"}), 404
-	return jsonify({"cache":sp.GetRobloxCache()}), 200
+		return jsonify({}), 404
+	try:
+		for msg in request.json.get('messages'):
+			sp.SendToRoblox(msg)
+		if not sp:
+			return jsonify({"status":"SessionPoolNotFound"}), 404
+		return jsonify({"cache":sp.GetRobloxCache()}), 200
+	except Exception as ex:
+		print(ex)
+		return "{}"
 
 @app.route("/pool/<pool>/<session>/messages",methods=["POST"])
 def getMessagesEndpoint(pool:str,session:str):
@@ -229,6 +244,7 @@ def getMessagesEndpoint(pool:str,session:str):
 		return jsonify({"status":"SessionPoolNotFound"}), 404
 	if not session[:50] in sp.servers:
 		return jsonify({"status":"ServerNotFound"}), 404
+	print(request.json)
 	for msg in request.json.get('messages'):
 		sp.SendToDiscord(msg)
 	splittedsession = session.split('@')
@@ -241,5 +257,5 @@ if __name__ == "__main__":
 		app.logger.disabled = True
 		clogger.info("Disabed werkzeug logger")
 	LoadSessionPools()
-	plogger.info("Starting flask server on port 26947. URL: https://127.0.0.1:26947")
+	plogger.info("Starting flask server on port 26947. URL: http://127.0.0.1:26947")
 	app.run(host="0.0.0.0",port=26947)

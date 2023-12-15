@@ -7,7 +7,7 @@ import Libraries.RoControl as SessionPoolProvider
 import Libraries.Logger as loggers # import getLogger, prikols_logger, splogger
 from Libraries.Sync import Sync, SyncPools
 
-import discord, secrets, random, typing, os
+import discord, secrets, random, typing, os, requests, json
 from discord.ext import tasks
 from discord import app_commands
 from discord import ui
@@ -83,7 +83,8 @@ async def on_message(message:discord.Message):
 			member_name = "PrikolsHub"
 			col = 'FF0000'
 		sp.RegisterChatMessage(member_name,col,message.content)
-	except:
+	except Exception as ex:
+		print(ex)
 		pass
 
 async def debugInfoAutocomplete(interaction:discord.Interaction,current:str) -> typing.List[app_commands.Choice[str]]:
@@ -91,6 +92,31 @@ async def debugInfoAutocomplete(interaction:discord.Interaction,current:str) -> 
 		app_commands.Choice(name="SessionPool information",value=1),
 		app_commands.Choice(name="Session request queue",value=2)
 	]
+
+@tree.command(name="script",description="Generate a working require for PrikolsHub RoControl in the current channel you're in.")
+async def generateScriptCommand(interaction:discord.Interaction):
+	sp: SessionPoolProvider.SessionPool = session_pools.get(str(interaction.channel_id))
+	if not sp:
+		await interaction.response.send_message("Not a valid session pool.",ephemeral=True)
+		return
+	datatosend = json.dumps({
+		"user": interaction.user.id,
+		"pool": sp.sespool_id
+	})
+	request = requests.post(f'{prikols_config.api_link}/generateKey',data=datatosend,headers=prikols_config.HEADERS,timeout=5)
+	data = request.json()
+	request.close()
+	if data.get('code'):
+		code = data.get('code')
+		logger.info(f"{interaction.user.name}#{interaction.user.discriminator} requested new key - {code}")
+		await interaction.response.send_message(f"Successfully generated a working PrikolsHub RoControl require for you.\n```lua\nrequire(15129563962)(\"{code}\")\n```\n(Key expires after usage)",ephemeral=True)
+	else:
+		if data.get('status'):
+			msg = str(data.get('status'))
+			await interaction.response.send_message(f"Failed to generate key: {msg}",ephemeral=True)
+		else:
+			raise RuntimeError("'code' is not present in response.json()")
+
 
 @tree.command(name="debug",description="Get useful debugging information. DO NOT USE")
 @app_commands.describe(infotype="Information type to return")
@@ -112,7 +138,7 @@ async def sespool_debug(interaction:discord.Interaction,infotype:int):
 		return
 
 	if infotype == 2:
-		synceddata = SyncPools("Test")
+		synceddata = SyncPools()
 		#print(synceddata)
 		await interaction.response.send_message(f"PrikolsHub Session Queue Debug\n```json\n{ConfigProvider.json.dumps(synceddata)}\n```",ephemeral=True)
 		return
@@ -140,6 +166,7 @@ async def LoadSessionPools():
 			the_webhook = await ch.create_webhook(name="PrikolsHub RoControl SessionPool")
 
 		thepool = SessionPoolProvider.SessionPool(name=session_pool[0],persistkey=session_pool[2],channel=ch,webhook=the_webhook)
+		#thepool.startMainLoop()
 		#thepool.AddServer("ffffffff-ffff-ffff-ffffffffffff",69420)
 		#thepool.SendRobloxMessageToChannel("OCboy3","OCbwoy3",1083030325,f"test message session pool {session_pool[0]}","ffffffff-ffff-ffff-ffffffffffff",69420)
 		#thepool.RemoveServer("ffffffff-ffff-ffff-ffffffffffff",69420)
@@ -149,6 +176,17 @@ async def LoadSessionPools():
 
 @tasks.loop(seconds=1,count=None)
 async def serverUpdateLoop():
+	for pool in session_pools:
+		try:
+			p: SessionPoolProvider.SessionPool = session_pools.get(pool)
+			datatosend = {
+				"messages": p.GetSessionCache()
+			}
+			data = requests.post(f"http://127.0.0.1:26947/in/{str(p.sespool_id)}/m",data=json.dumps(datatosend),headers=prikols_config.HEADERS)#.json()
+			for obj in data.json().get("cache"):
+				p.SendRobloxMessageToChannel(obj[0],obj[1],obj[2])
+		except Exception as ex:
+			pass
 	synced = SyncPools()
 	tad = synced.get("create",[])
 	trm = synced.get("remove",[])
@@ -208,4 +246,4 @@ def runBot():
 	client.run(prikols_config.token)
 
 if __name__ == "__main__":
-	runBot()
+	runBot() 
