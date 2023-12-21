@@ -1,6 +1,7 @@
 # PrikolsHub RoControl
 
-skid admin to connect roblox and discord
+connect roblox and discord and run scripts and commands
+note: it might be being deprecated on december 23, or maybe not.
 
 This works on a `SessionPool` basis, meaning, that multiple sessions can be in a single channel, and message history is present, because channels are not deleted and the audit log isn't spammed.
 
